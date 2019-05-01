@@ -1,9 +1,7 @@
-import { IResolvers } from "graphql-tools";
 import * as bcrypt from "bcryptjs";
-import { sign } from "jsonwebtoken";
-
+import { IResolvers } from "graphql-tools";
+import { createTokens } from "./auth";
 import { User } from "./entity/User";
-import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from "./constants";
 
 export const resolvers: IResolvers = {
   Query: {
@@ -36,21 +34,28 @@ export const resolvers: IResolvers = {
         return null;
       }
 
-      const refreshToken = sign(
-        { userId: user.id, count: user.count },
-        REFRESH_TOKEN_SECRET,
-        {
-          expiresIn: "7d"
-        }
-      );
-      const accessToken = sign({ userId: user.id }, ACCESS_TOKEN_SECRET, {
-        expiresIn: "15min"
-      });
+      const { accessToken, refreshToken } = createTokens(user);
 
       res.cookie("refresh-token", refreshToken);
       res.cookie("access-token", accessToken);
 
       return user;
+    },
+    invalidateTokens: async (_, __, { req }) => {
+      if (!req.userId) {
+        return false;
+      }
+
+      const user = await User.findOne(req.userId);
+      if (!user) {
+        return false;
+      }
+      user.count += 1;
+      await user.save();
+
+      // res.clearCookie('access-token')
+
+      return true;
     }
   }
 };
